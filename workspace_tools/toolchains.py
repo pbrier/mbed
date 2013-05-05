@@ -537,9 +537,9 @@ class GCC(mbedToolchain):
         
         # Note: We are using "-O2" instead of "-Os" to avoid this known GCC bug:
         # http://gcc.gnu.org/bugzilla/show_bug.cgi?id=46762
-        common_flags = ["-c", "-O2", "-Wall",
+        common_flags = ["-c", "-Os", "-Wall",
             "-fmessage-length=0", "-fno-exceptions", "-fno-builtin",
-            "-ffunction-sections", "-fdata-sections",
+            "-ffunction-sections", "-fdata-sections", 
             "-MMD", "-save-temps"
             ] + cpu
         
@@ -548,12 +548,13 @@ class GCC(mbedToolchain):
         self.cc  = [join(tool_path, "arm-none-eabi-gcc"), "-std=gnu99"] + common_flags
         self.cppc =[join(tool_path, "arm-none-eabi-g++"), "-std=gnu++98"] + common_flags
         
-        self.ld = [join(tool_path, "arm-none-eabi-gcc"), "-Wl,--gc-sections"] + cpu
+        self.ld = [join(tool_path, "arm-none-eabi-gcc"), "-Wl,--gc-sections", "-Wl,-Map=output.map"] + cpu
         self.sys_libs = ["stdc++", "supc++", "m", "c", "gcc"]
         
         self.ar = join(tool_path, "arm-none-eabi-ar")
         self.elf2bin = join(tool_path, "arm-none-eabi-objcopy")
-    
+        self.binsize = join(tool_path, "arm-none-eabi-size")
+        
     def assemble(self, source, object):
         self.default_cmd(self.asm + ["-o", object, source])
     
@@ -615,7 +616,10 @@ class GCC(mbedToolchain):
     
     def binary(self, elf, bin):
         self.default_cmd([self.elf2bin, "-O", "binary", elf, bin])
+        self.default_cmd([self.binsize, elf])
 
+
+   
 
 class GCC_ARM(GCC):
     NAME = 'GCC_ARM'
@@ -723,7 +727,6 @@ class IAR(mbedToolchain):
     
     def binary(self, elf, bin):
         self.default_cmd([self.elf2bin, '--bin', elf, bin])
-
 
 TOOLCHAIN_CLASSES = {
     'ARM': ARM_STD, 'uARM': ARM_MICRO,

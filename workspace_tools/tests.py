@@ -491,45 +491,67 @@ TESTS = [
         "id": "USB_1", "description": "USB: Mouse",
         "source_dir": join(TEST_DIR, "usb", "device", "basic"),
         "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
-        "supported": CORTEX_ARM_SUPPORT,
+
     },
     {
         "id": "USB_2", "description": "USB: Keyboard",
         "source_dir": join(TEST_DIR, "usb", "device", "keyboard"),
         "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
-        "supported": CORTEX_ARM_SUPPORT,
     },
     {
         "id": "USB_3", "description": "USB: Mouse_Keyboard",
         "source_dir": join(TEST_DIR, "usb", "device", "keyboard"),
         "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
-        "supported": CORTEX_ARM_SUPPORT,
     },
     {
         "id": "USB_4", "description": "USB: Serial Port",
         "source_dir": join(TEST_DIR, "usb", "device", "serial"),
         "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
-        "supported": CORTEX_ARM_SUPPORT,
     },
     {
         "id": "USB_5", "description": "USB: Generic HID",
         "source_dir": join(TEST_DIR, "usb", "device", "raw_hid"),
         "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
-        "supported": CORTEX_ARM_SUPPORT,
     },
     {
         "id": "USB_6", "description": "USB: MIDI",
         "source_dir": join(TEST_DIR, "usb", "device", "midi"),
         "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
-        "supported": CORTEX_ARM_SUPPORT,
     },
     {
         "id": "USB_7", "description": "USB: AUDIO",
         "source_dir": join(TEST_DIR, "usb", "device", "audio"),
         "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
-        "supported": CORTEX_ARM_SUPPORT,
     },
-    
+	# My projects
+	 {
+        "id": "PB_1", "description": "PB: Fanbot 1",
+        "source_dir": join(ROOT, "projects", "fanbot"),
+        "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
+    },
+     {
+        "id": "PB_2", "description": "PB: Fanbot test",
+        "source_dir": join(ROOT, "projects", "fanbot_test"),
+        "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
+    },    
+	{
+        "id": "PB_3", "description": "PB: Fanbot hub",
+        "source_dir": join(ROOT, "projects", "fanbot_hub"),
+        "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
+    },
+	
+	{
+        "id": "PB_4", "description": "PB: IAP test",
+        "source_dir": join(ROOT, "projects", "iap"),
+        "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
+	},
+	
+    {
+        "id": "PB_5", "description": "PB: HID test",
+        "source_dir": join(ROOT, "projects", "hid_test"),
+        "dependencies": [MBED_LIBRARIES, USB_LIBRARIES],
+    },
+	
     # CMSIS DSP
     {
         "id": "CMSIS_DSP_1", "description": "CMSIS DSP: FIR",

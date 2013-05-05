@@ -1,0 +1,1 @@
+python make.py -t ARM -m LPC11U24  -v -p %1 %2 %3 %4

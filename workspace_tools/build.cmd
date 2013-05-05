@@ -1,0 +1,1 @@
+python build.py -t GCC_ARM -m LPC11U24 -u

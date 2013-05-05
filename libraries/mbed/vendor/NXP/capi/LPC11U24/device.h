@@ -41,18 +41,23 @@
 
 #define DEVICE_PWMOUT           1
 
+#if 0
 #define DEVICE_SEMIHOST         1
 #define DEVICE_LOCALFILESYSTEM  1
 #define DEVICE_ID_LENGTH       32
 #define DEVICE_MAC_OFFSET      20
+#else
+#define DEVICE_SEMIHOST         0
+#define DEVICE_LOCALFILESYSTEM  0
+#endif
 
 #define DEVICE_SLEEP            1
 
 #define DEVICE_DEBUG_AWARENESS  0
 
-#define DEVICE_STDIO_MESSAGES   1
+#define DEVICE_STDIO_MESSAGES   0 
 
-#define DEVICE_ERROR_PATTERN    1
+#define DEVICE_ERROR_PATTERN    0 
 
 #include "objects.h"
 

@@ -30,15 +30,14 @@ public:
     
     /*
     * Check if the device is configured
-    *
     * @returns true if configured, false otherwise
     */
     bool configured(void);
     
     /*
-    * Connect a device
+	 * @param block Wait until the device is configured. Otherwise, just return and use configured().
     */
-    void connect(void);
+    void connect(bool block = true);
     
     /*
     * Disconnect a device
