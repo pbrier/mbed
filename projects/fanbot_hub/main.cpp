@@ -6,29 +6,26 @@
 #include "mbed.h"
 #include "USBSerial.h"
  
-// externals 
-//extern int stdio_uart_inited;
-//extern serial_t stdio_uart;
  
 //Virtual serial port over USB
 USBSerial usb;
-// Serial pc(USBTX, USBRX); // P0_19, P0_18
-// Serial uart(P1_27, P1_26);
-
 DigitalOut led(P0_7);
-DigitalIn button(P0_1);
-
-int i = 0;
 
 #define BAUD 9600
 #define t_bit (1000000/BAUD) // 9600 bps, 10 microseconds bit time
 
-DigitalInOut pin(P0_20);
+//DigitalInOut pin(P0_9);
+DigitalInOut pin0(P0_0);
+DigitalInOut pin1(P0_9);
+DigitalInOut pin2(P0_18);
+DigitalInOut pin3(P0_7);
+DigitalInOut pin4(P0_12);
+DigitalInOut pin5(P0_12);
 
-// InterruptIn rx(P0_20);
+
 
 // Software UART send. mark is LOW space is HIGH
-void send(char c)
+void send(DigitalInOut  &pin, char c)
 {
   pin.output();
   pin.mode(PullDown);
@@ -46,8 +43,8 @@ void send(char c)
 }
 
 
-// receive RS232, 9600bps, wait for some time, or return
-char receive(void)
+// receive RS232, 9600bps, wait for some time to see if there is a start bit, or return 0
+char receive(DigitalInOut &pin)
 {
   char c = 0;
   pin.input();
@@ -59,13 +56,17 @@ char receive(void)
   for(int bit=0; bit<8; bit++) // sample 8 bits
   { 
     c |= ( pin == 1 ?  (1<<bit) : 0 );
-    // led = ( ( (unsigned char) c & (1<<bit) ) ? 1 : 0 );
+    led = ( ( (unsigned char) c & (1<<bit) ) ? 1 : 0 );
     wait_us(t_bit);
   }
   wait_us(t_bit); // wait for the stopbit to complete
   return c;
 }
 
+
+/**
+*** Main function
+**/
 int main(void) {
   static int i;
   char c;
@@ -80,16 +81,21 @@ int main(void) {
     {
       usb.putc( serial_getc(&stdio_uart) );  
     } */ 
-	while ( usb.available () )
-     {	 
-	   c = usb.getc();
-       send(c);   
-	   usb.putc( c );  
-	 }
-	 c = receive();
-	 if ( c ) usb.putc( c );  
+	  while ( usb.available () )
+    {	 
+      c = usb.getc();
+      send(pin0, c);   
+      send(pin1, c);   
+      send(pin2, c);   
+      send(pin3, c);   
+      send(pin4, c);   
+      send(pin5, c);    
+      usb.putc( c );  
+    }
+    c = receive(pin0);
+    if ( c ) usb.putc( c );  
 	 
-	led = ( (i++) & 256 ? 1 : 0 );
+    led = ( (i++) & 256 ? 1 : 0 );
 	//wait(0.001);
   }
 }

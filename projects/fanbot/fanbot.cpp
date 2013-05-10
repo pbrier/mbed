@@ -133,19 +133,22 @@ void do_serial()
   
   while( 1 )
   {
-    if ( ir_rx == 0 )
+    if ( ir_rx == 0 || button == 0) // button pressed or IR received
     {
       leds = 1<<i;
-      if ( ++i > 6 ) i = 0;
-      wait(0.1);
+      if ( ++i > 6 ) 
+        i = 0;
+      wait(0.2);
     }
     if ( serial_readable( &stdio_uart ) )
     {
-      char c= '0';
+      char c = 0;
       while ( serial_readable( &stdio_uart ) )
         c = serial_getc(&stdio_uart); 
       switch( c )
       {
+        case 0: 
+          break;
         case 'h':         
           tx(usb_conn, "Hello world!\n");
           break;
@@ -153,12 +156,12 @@ void do_serial()
           play();
           break;
         default:
-          i = c - '0' - 1;
-          if ( i > 0 && i < 8 )
+          if ( c >= '0' && c <= '7' )
           {
+             i = c - '0' - 1;
             leds = 1<<i;
-            servo1.pulsewidth_us(700 + 25 * i);
-            servo2.pulsewidth_us(700 + 25 * i);
+            //servo1.pulsewidth_us(700 + 25 * i);
+           // servo2.pulsewidth_us(700 + 25 * i);
           }
           break;
       }
