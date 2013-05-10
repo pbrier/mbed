@@ -44,7 +44,8 @@ DigitalIn  button(P0_1);
 DigitalIn  uart_rx(P1_26); // rx pin as input, so we can disable the pull-up before enumeration
 
 // IR led and receiver
-DigitalIn ir_rx(P1_16);
+// 1st 5 protos had IR on P1.16: DigitalIn ir_rx(P1_16);
+DigitalIn ir_rx(P1_14);
 DigitalOut ir_tx(P1_13);
 PwmOut ir_pwm(P1_13);
 
@@ -55,12 +56,17 @@ PwmOut ir_pwm(P1_13);
 IAP iap;
 
 #define FAN_STEPS 20 // nr of program steps
+unsigned short int program[128]; // buffer for EEPROM, 256 bytes, need to be word aligned
 
+ 
 volatile int read_res=0, send_res=0, counter=0;
 
-void tic_handler() {
-    send_report.data[2] = counter++;
-    send_res = hid.send(&send_report);	
+
+// USB send Tick handler
+void tic_handler() 
+{
+  send_report.data[2] = counter++;
+  send_res = hid.send(&send_report);	
 }
 
 // Software UART send. mark is LOW space is HIGH
@@ -85,10 +91,25 @@ void tx(DigitalOut &p, char *s)
   while ( *s ) 
   {
     send(p, *s++);
-	wait_us(1000);
+    wait_us(1000);
   }
 }
 
+// Play the sequence
+void play()
+{
+  iap.read_eeprom( (char*)TARGET_ADDRESS, (char *)program, MEM_SIZE );
+  for(int i=0; i<FAN_STEPS; i++)
+  {
+    leds = program[i] & 0xFF;
+    servo1.pulsewidth_us(700 + (program[i]>>8 & 0xFF) );
+    wait(0.1);
+  }
+}
+
+/**
+*** run serial communication mode
+**/
 void do_serial()
 {
   volatile static int i;
@@ -110,44 +131,55 @@ void do_serial()
  // s1->period_ms(15);
  // s2->period_ms(15);
   
-  
   while( 1 )
   {
     if ( ir_rx == 0 )
-	{
-	  leds = 1<<i;
-	  if ( ++i > 6 ) i = 0;
-	  wait(0.1);
-	}
+    {
+      leds = 1<<i;
+      if ( ++i > 6 ) i = 0;
+      wait(0.1);
+    }
     if ( serial_readable( &stdio_uart ) )
     {
-	  char c= '0';
-	  while ( serial_readable( &stdio_uart ) )
-	    c = serial_getc(&stdio_uart); 
-		i = c - '0' - 1;
-		
-	  // if ( i > 0 || i < 0 ) i = 0;
-	  if ( c == 'h' )  
-	    tx(usb_conn, "Hello world 2!\n");
-	  leds = 1<<i;
-	  servo1.pulsewidth_us(700 + 25 * i);
-	  servo2.pulsewidth_us(700 + 25 * i);
-	 // s1->pulsewidth_us(700 + 25 * i);  
-	 // s2->pulsewidth_us(700 + 25 * i);  
-	}
-	//wait(0.01);
+      char c= '0';
+      while ( serial_readable( &stdio_uart ) )
+        c = serial_getc(&stdio_uart); 
+      switch( c )
+      {
+        case 'h':         
+          tx(usb_conn, "Hello world!\n");
+          break;
+        case 'p':
+          play();
+          break;
+        default:
+          i = c - '0' - 1;
+          if ( i > 0 && i < 8 )
+          {
+            leds = 1<<i;
+            servo1.pulsewidth_us(700 + 25 * i);
+            servo2.pulsewidth_us(700 + 25 * i);
+          }
+          break;
+      }
+	  }
   }
-}
+} // do_serial()
 
-
+/**
+*** Main program
+*** work in 2 modes: 
+***   1) HID mode (tried first): receive commands from USB
+***   2) Serial mode (if USB/HID handshake fails within a certain time): Receive commands from serial port
+*** In addition the chip has a USB/MSD bootloader that can be activated by holding the program swith when the chip
+*** comes out of reset. 
+**/
 int main(void) {
-  unsigned short int program[128]; // 256 bytes, need to be word aligned
-
+ 
 // enable IR transmitter
   ir_pwm.period(1.0/38000.0);
   ir_pwm.pulsewidth(1.0/72000.0);
 
-    static int count = 0;
 	button.mode(PullUp);
 	uart_rx.mode(PullNone); // disable pull-up, so we can enumerate 
 	
@@ -163,9 +195,9 @@ int main(void) {
 	servo1.pulsewidth_us(700);
 	
 	//Fill the report
-    for(int i = 0; i < 64; i++)
-        send_report.data[i] = i;
-    send_report.length = 64;
+  for(int i = 0; i < 64; i++)
+    send_report.data[i] = i;
+  send_report.length = 64;
 
 	for(int i=0; i<7 && !hid.configured(); i++)
 	{
@@ -173,47 +205,38 @@ int main(void) {
 	  leds = 1<<i;
 	  wait(0.1);
 	}	 
-    if ( !hid.configured() )
-	  do_serial();
-    tic.attach(tic_handler, 0.1);
+  if ( !hid.configured() )
+  do_serial();
+  tic.attach(tic_handler, 0.1);
 	
-    while (1)
+  while (1)
 	{
 	  if ( button == 0 ) // button pressed == LOW 
-	  {
-        iap.read_eeprom( (char*)TARGET_ADDRESS, (char *)program, MEM_SIZE );
-		for(int i=0; i<FAN_STEPS; i++)
-		{
-		    leds = program[i] & 0xFF;
-		    servo1.pulsewidth_us(700 + (program[i]>>8 & 0xFF) );
-		    // leds = ((int)program[i]>>8) & 0xFF;
-			wait(0.1);
-		}
-      }
-	  else
-	    count = 0;
+	    play();
 
-      if (hid.readNB(&recv_report)) 
+    if (hid.readNB(&recv_report)) 
 	  {
 	    read_res++;
-		switch ( recv_report.data[0] ) 
-		{
-		  case 0: // set outputs
-            leds = recv_report.data[1];
-		    servo1.pulsewidth_us(700 + recv_report.data[2]);
-		    servo2.pulsewidth_us(700 + recv_report.data[3]);
-		    send_report.data[1] = button;
-            break;
-		  case 1: // Save data to eeprom 
-		    for(int i=0; i<FAN_STEPS; i++)
-			  program[i] = ((unsigned short int)recv_report.data[1 + 2*i]) | ((unsigned short int)recv_report.data[2 + 2*i] << (unsigned short int)8);
-		     send_report.data[1] = iap.write_eeprom( (char*)program, (char*)TARGET_ADDRESS, MEM_SIZE );
-		    break;
-		  default: // unkown command
-		    break;
+      switch ( recv_report.data[0] ) 
+      {
+        case 0: // set outputs
+          leds = recv_report.data[1];
+          servo1.pulsewidth_us(700 + recv_report.data[2]);
+          servo2.pulsewidth_us(700 + recv_report.data[3]);
+          send_report.data[1] = button;
+          break;
+        case 1: // Save data to eeprom 
+          for(int i=0; i<FAN_STEPS; i++)
+          program[i] = ((unsigned short int)recv_report.data[1 + 2*i]) | ((unsigned short int)recv_report.data[2 + 2*i] << (unsigned short int)8);
+          send_report.data[1] = iap.write_eeprom( (char*)program, (char*)TARGET_ADDRESS, MEM_SIZE );
+          break;
+        case 2: // Run program
+          play();        
+        default: // unkown command
+          break;
         }			
-      }
+    }
 	 // printf("send: %d receive: %d counter: %d\n", send_res, read_res, counter);
 	  wait_ms(1);
 	}
-}
+} // main
