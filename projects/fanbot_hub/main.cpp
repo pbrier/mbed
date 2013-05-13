@@ -1,7 +1,23 @@
 /*
- * Software serial example
- * Peter Brier
- */
+
+Copyright (c) 2013 Peter Brier
+
+This file is part of the FanBot project.
+
+Fanbot is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
 
 #include "mbed.h"
 #include "USBSerial.h"
@@ -10,6 +26,7 @@
 //Virtual serial port over USB
 USBSerial usb;
 DigitalOut led(P0_7);
+DigitalIn button(P0_3);
 
 #define BAUD 9600
 #define t_bit (1000000/BAUD) // 9600 bps, 10 microseconds bit time
@@ -70,17 +87,9 @@ char receive(DigitalInOut &pin)
 int main(void) {
   static int i;
   char c;
-  //  serial_init(&stdio_uart, P1_27, P1_26); // default is 9600bps
- 
-   // uart.baud(BAUD);
-   // serial.printf("I am a virtual serial port\r\n");
   led = 1;
   while(1)
   { 
-   /* while ( serial_readable( &stdio_uart ) ) 
-    {
-      usb.putc( serial_getc(&stdio_uart) );  
-    } */ 
 	  while ( usb.available () )
     {	 
       c = usb.getc();
@@ -92,11 +101,10 @@ int main(void) {
       send(pin5, c);    
       usb.putc( c );  
     }
-    c = receive(pin0);
+    c = receive(pin1);
     if ( c ) usb.putc( c );  
 	 
     led = ( (i++) & 256 ? 1 : 0 );
-	//wait(0.001);
   }
 }
 
