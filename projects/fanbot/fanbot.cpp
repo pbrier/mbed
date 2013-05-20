@@ -137,14 +137,32 @@ void play()
   }
 }
 
+// Set servo position
+void set_servo(char n, int val)
+{
+  if ( n == 'A' ) servo1.pulsewidth_us(700 + 25 * val);
+  if ( n == 'B' ) servo2.pulsewidth_us(700 + 25 * val);
+}
+
+// get value, wait max 30msec
+int get_val()
+{
+  char c = 0;
+  for(int i=0; i<30 && !serial_readable( &stdio_uart );i++ )
+    wait(0.001);
+  c = serial_getc(&stdio_uart); 
+  return (int)(c-'0');
+}
 
 /**
 *** run serial communication mode
 *** Commands:
 *** 'p' Play sequence
 *** 's' Stop
-*** '0'..'7': select LED 1..7 and arm position (0 is off)
-*** 's' Report serial nr (send as 8 digit HEX  number)
+*** 'L' [val]: select LED value
+*** 'A' [val]  arm position [servo 1] (0 is off)
+*** 'B' [val]  arm position [servo 2] (0 is off)
+*** 'n' Report serial nr (send as 8 digit HEX  number)
 *** 'r' Read memory
 ***
 **/
@@ -163,13 +181,17 @@ void do_serial()
   
   while( 1 )
   {
-    if ( ir_rx == 0 || button == 0) // button pressed or IR received
+   /* if ( ir_rx == 0 ) // button pressed or IR received
     {
       leds = 1<<i;
       if ( ++i > 6 ) 
         i = 0;
       wait(0.2);
-    }
+    } */
+    
+    if ( button == 0 )
+      play();
+    
     if ( serial_readable( &stdio_uart ) )
     {
       char c = 0;
@@ -179,22 +201,25 @@ void do_serial()
       {
         case 0: 
           break;
-        case 's':  // send serialnr as hex value, values are echoed back: so clean the rx FIFO
+        case 'n':  // send serialnr as hex value, values are echoed back: so clean the rx FIFO after each TX
           for(int b=28; b>=0; b-=4) 
             tx_nibble(usb_conn, serial_nr >> b);
+          wait(0.01);
           serial_clear(&stdio_uart);
           break;
         case 'p':
           play();
           break;
+        case 's': // stop
+          break;
+        case 'L': // led value
+          leds = 1<<get_val();
+          break;
+        case 'A': // first servo
+        case 'B': // second servo
+          set_servo( c, get_val() );
+          break;
         default:
-          if ( c >= '0' && c <= '7' )
-          {
-            i = c - '0' - 1;
-            leds = 1<<i;
-            servo1.pulsewidth_us(700 + 25 * i);
-            servo2.pulsewidth_us(700 + 25 * i);
-          }
           break;
       }
 	  }
@@ -211,6 +236,9 @@ void do_serial()
 *** comes out of reset. 
 **/
 int main(void) {
+
+  wait(2.0);
+
   serial_nr = iap.read_serial();
  
 // enable IR transmitter

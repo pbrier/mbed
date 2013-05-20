@@ -6,7 +6,8 @@ RS485 to 24 Serial HUB
 
 Copyright (c) 2013 Peter Brier
 
-This file is part of the FanBot project.
+This file is part of the FanBot project. 
+See www.kekbot.org
 
 Fanbot is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,24 +35,15 @@ extern serial_t stdio_uart;
  
  
 //Virtual serial port over USB
-//USBSerial usb;
-//DigitalOut led(P0_7);
-DigitalIn button(P0_1);
+USBSerial usb;
 
+
+DigitalIn button(P0_1);
 DigitalOut led_a(P1_28);
 DigitalOut led_b(P1_31);
 
 #define BAUD 9600
 #define t_bit (1000000/BAUD) // 9600 bps, 10 microseconds bit time
-
-//DigitalInOut pin(P0_9);
-DigitalInOut pin0(P0_8);
-DigitalInOut pin1(P0_9);
-DigitalInOut pin2(P0_18);
-DigitalInOut pin3(P0_7);
-DigitalInOut pin4(P0_12);
-DigitalInOut pin5(P0_12);
-
 
 // Hub pin numbers for 24 ports
 static PinName hub_pin[] = {
@@ -125,7 +117,7 @@ public:
     void kick(float s) {
      __disable_irq();
         LPC_WWDT->CLKSEL = 0x1;                // Set CLK src to PCLK
-        uint32_t clk = 6000/2;    // WD has a fixed /4 prescaler, PCLK default is /4 
+        //uint32_t clk = 6000/2;    // WD has a fixed /4 prescaler, PCLK default is /4 
         LPC_WWDT->TC = 0xFFF; // s * (float)clk;         
         LPC_WWDT->MOD = 0x3;                   // Enabled and Reset        
         kick();
@@ -146,7 +138,7 @@ Watchdog w;
  **/
  void iotest()
  {
-  int i;
+  int i=0;
   w.kick(2.5);
   wait(1);
 
@@ -176,7 +168,9 @@ Watchdog w;
   }
 }
 
-
+/**
+*** Send test string over RS485 and echo received chars
+**/
 void rs485_test()
 {
   char buf[128];
@@ -216,37 +210,70 @@ void rs485_test()
 }
 
 
+/**
+*** Receive via USB virtual COM port and send to one port, and receive chars from that port
+**/
+void single_comm(DigitalInOut &pin)
+{
+  static int i=0;
+  char c;
+  pin_function(P0_15,1);
+  pin_function(P0_10,1);
+
+  while(1)
+  { 
+	  while ( usb.available () )
+    {	 
+       c = usb.getc();
+       if ( c == '$' ) return;
+       send(pin, c);   
+    }
+    c = receive(pin);
+    if ( c ) usb.putc( c );  
+    led_a = ( (i++) & 256 ? 1 : 0 );
+    led_b = c;
+  }
+}
+
+/**
+*** Receive via USB virtual COM port and send to all ports
+**/
+void rs485_comm()
+{
+  static int i;
+  char c=0;
+  while(1)
+  { 
+	  while ( usb.available () )
+    {	 
+       c = usb.getc();
+       if ( c == '#' ) 
+       {
+         i = usb.getc() - 'A';
+         DigitalInOut hub(hub_pin[i]);      
+         single_comm(hub);        
+       }
+       for(i=0; i<(sizeof(hub_pin)/sizeof(hub_pin[0])); i++)
+       {
+         DigitalInOut hub(hub_pin[i]);
+         pin_function(P0_15,1);
+         pin_function(P0_10,1);
+         send(hub, c);   
+       }
+    }
+    if ( c ) usb.putc( c );  
+    led_a = ( (i++) & 256 ? 1 : 0 );
+    led_b = c;
+  }
+}
+
 
 /**
 *** Main function
 **/
 int main(void) {
-  static int i;
-  char c;
- //iotest();
-  rs485_test();
-  //led = 1;
-
-
-  /*
-  while(1)
-  { 
-	  while ( usb.available () )
-    {	 
-      c = usb.getc();
-      send(pin0, c);   
-      send(pin1, c);   
-      send(pin2, c);   
-      send(pin3, c);   
-      send(pin4, c);   
-      send(pin5, c);    
-      usb.putc( c );  
-    }
-    c = receive(pin1);
-    if ( c ) usb.putc( c );  
-	 
-    led = ( (i++) & 256 ? 1 : 0 );
-  }
-  */
+ // iotest();
+ //rs485_test();
+ rs485_comm();
 }
 
