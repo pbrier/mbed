@@ -95,17 +95,17 @@ unsigned int serial_nr = 0, serial_nr_rx; // serial nr and recieved serial # (fo
 unsigned char tagged = 0; // are we tagged?
 unsigned short int checksum; // communication checksum, sum of all characters in frame, excluding pre-abmle and checksum
 unsigned int port_state[24]; // 0 if port not used, serial number of connected device if port is used
-unsigned short int port_cmd[24]; // 0: no command
+unsigned short int port_cmd[24]; // 0: no command, MSB == opcode, LSB==value
 unsigned short int arg[24]; // arguments for the opcodes
 
 
 #ifdef DEBUG_I2C
 I2C i2c(P0_5,P0_4);
-static char init_code[] = { 
+static char init_code[] = {  // I2C init code
  0x38, // function set
  0x39, // function set
  0x14, // internal osc frequency
- 0x7F, // contrast set
+ 0x7F, // contrast set (low nibble is contrast [0..F] for [min..max] )
  0x50, // power/icon control/contrast set
  0x6c, // follower control
  0x0c, // display on/off
@@ -185,9 +185,11 @@ void debugstring(char *s)
  
 void debugint(int i)
 {
+#ifdef DEBUG
   char d[13];
   sprintf(d, "%d\n\r", i);
   debugstring(d);
+#endif
 }
 
 
@@ -436,8 +438,8 @@ void send_masked(char c, unsigned long mask)
     if ( mask & 1<<i )
     {
       DigitalInOut hub(hub_pin[i]);
-      pin_function(P0_15,1);
-      pin_function(P0_10,1);
+      if ( hub_pin[i] == P0_15 ) pin_function(P0_15,1);
+      if ( hub_pin[i] == P0_10 ) pin_function(P0_10,1);
       send(hub, c);   
     }
   }
@@ -702,6 +704,7 @@ unsigned short int process_opcode(unsigned short int opcode, unsigned short int 
                port_cmd[index] = 255;
              else
                port_cmd[index] = 0;
+             port_cmd[index] += opcode<<8; // set the opcode in the MSB of the command
              if ( index < 24 ) 
                index++; // next one
            }
@@ -773,13 +776,27 @@ unsigned short int process_opcode(unsigned short int opcode, unsigned short int 
        tagged = 0;
        break;
      case PLAY_FRAME: // 1 bit per port
+       debugstring("play frame!");
+       for(int i=0; i<24; i++)
+        send_masked('p', 1<<i);
+       break;
      case LED_FRAME: // 1 bit per port
-     case POS_FRAME: // 2 bits per port
-       debugstring("play/led/pos frame!");
+       debugstring("led frame!");
        for(int i=0; i<24; i++)
        {
         send_masked('L', 1<<i);
-        send_masked(port_cmd[i], 1<<i);
+        send_masked(port_cmd[i] & 0xFF, 1<<i);
+       }
+       break;
+     case POS_FRAME: // 1 bits per port (left/right)
+       debugstring("pos frame!");
+       for(int i=0; i<24; i++)
+       {
+        send_masked('A', 1<<i);
+        if ( port_cmd[i] & 0xFF )
+          send_masked(255, 1<<i);
+        else
+          send_masked(1, 1<<i);
        }
        break;
      default: // unknown opcode, flash lights
@@ -840,8 +857,9 @@ void hub_comm()
         state = (getint(&opcode) ? 3 : 0); 
         break;
       case 3: // wait for length
-        state = (getint(&length) ? 4 : 0); 
-         break;
+        state = (getint(&length) ? 4 : 0);
+        if ( length > 1024 ) state = 0; // assume maximum length       
+        break;
       case 4: // receive data [length bytes]
         // debugstring("Opcode: ");
         // debugint(opcode);
