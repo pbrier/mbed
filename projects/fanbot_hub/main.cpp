@@ -99,8 +99,8 @@ unsigned short int port_cmd[24]; // 0: no command
 unsigned short int arg[24]; // arguments for the opcodes
 
 
+#ifdef DEBUG_I2C
 I2C i2c(P0_5,P0_4);
-
 static char init_code[] = { 
  0x38, // function set
  0x39, // function set
@@ -111,8 +111,8 @@ static char init_code[] = {
  0x0c, // display on/off
  0x01 // clear display
 };
-
 const int i2c_addr = 124;
+  
   
 /**
 *** i2c_test()
@@ -165,7 +165,7 @@ void i2c_test()
       i2c_data(c++);
   }
 }
-
+#endif
 
 void debugstring(char *s)
 {
@@ -1044,7 +1044,10 @@ int select_function(int n)
 int main(void) {
   read_config();
   rs485_init();
+  
+#ifdef DEBUG_I2C
   i2c_init();
+#endif
   
   while( 1 ) 
   {
@@ -1054,7 +1057,9 @@ int main(void) {
       case 1: hub_comm(); break; // protocol decoder
       case 2: led_test(); break;
       case 3: request_test(); break;
+#ifdef DEBUG_I2C
       case 4: i2c_test(); break;
+#endif
       default: break;
 
       /* 
