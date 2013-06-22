@@ -24,11 +24,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 */
+#define VERSION_NR 123
 
 // #define DEBUG 
 // #define DEBUG_I2C
 
-#define BAUDRATE 9600
+#define BAUDRATE 115200
 
 #include "mbed.h"
 
@@ -40,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "pinmap.h"
 #include "serial_api.h"
 #include "IAP.h"
+#include "serial_ringbuffer.h"
 
 // externals from serial_api
 extern int stdio_uart_inited;
@@ -187,10 +189,21 @@ void debugint(int i)
 {
 #ifdef DEBUG
   char d[13];
-  sprintf(d, "%d\n\r", i);
+  sprintf(d, "%d", i);
   debugstring(d);
 #endif
 }
+
+void debughex(int i)
+{
+#ifdef DEBUG
+  char d[13];
+  sprintf(d, "%8.8X", i);
+  debugstring(d);
+#endif
+}
+
+
 
 
 /**
@@ -293,7 +306,8 @@ public:
  **/
 static inline char c_get()
 {
-  char c = serial_getc(&stdio_uart);
+  //char c = serial_getc(&stdio_uart);
+  char c = (char) ringbuffer_getc();
 //  debugint(c);
   return c;
   // return usb.getc();
@@ -314,7 +328,8 @@ static inline void c_put(char c)
 **/
 static inline int c_available()
 {
- return serial_readable( &stdio_uart );
+ //return serial_readable( &stdio_uart );
+ return ringbuffer_empty() == 0;
  // return usb.available ();
 }
 
@@ -474,21 +489,17 @@ void single_comm(DigitalInOut &pin)
 
 unsigned int request_id(unsigned char n)
 {
-  int id=0;
+  unsigned int id=0;
   char val, ch, j, bitshift=28;
   DigitalInOut pin(hub_pin[n]);
   send(pin, 'n');
  
   while( bitshift ) // for all 8 characters
   {
-     for(j=0; j<200 && ch==0; j++)
+     for(j=0, ch=0; j<200 && ch==0; j++)
        ch = receive(pin);
-     debugint((int)ch);
      if ( ch == 0 ) 
-     {
-       debugint(-1);
        return 0; // timeout
-     }
      if ( ch >= '0' && ch <= '9' )
        val = ch - '0' ;
      else if ( ch >= 'A' && ch <= 'F' )
@@ -504,39 +515,19 @@ unsigned int request_id(unsigned char n)
 **/
 void request_test(void)
 {
+  char s[32];
+    
   while(button)
   {  
+    sprintf(s,"0: %8.8X\r\n", serial_nr );
+    
+    debugstring(s);
     for(int i=0; i<24; i++)
     {
-      debugstring("ID: ");
-      debugint(i);
-      debugint(request_id(i));
-    }
-   /* for(int i=0; i<(sizeof(hub_pin)/sizeof(hub_pin[0])); i++)
-    {
-      DigitalInOut pin(hub_pin[i]);
-      pin_function(P0_15,1);
-      pin_function(P0_10,1);
-      usb.putc('\r');  
-      usb.putc('\n'); 
-      usb.putc('A'+i); 
-      usb.putc(':'); 
-      send(pin, 'n');
-    
-      n = 0;
-      j=0;    
-      while( (n<8) && (j < 200) )
-      { 
-        c = receive(pin);
-        if ( c ) 
-        {
-          usb.putc( c );  
-          n++;
-          j=0;
-        }
-        j++;
-      }
-    }*/
+      sprintf(s,"%c: %8.8X\r\n", 'A' + i, request_id(i) );
+      debugstring(s);
+    } 
+
   }
   return;
 }
@@ -755,8 +746,8 @@ unsigned short int process_opcode(unsigned short int opcode, unsigned short int 
          startframe(STATUS_REPORT, 4 + 24*4 + 4); // status is [my id] [24 robot ids] [software version]
          putint32(serial_nr);
          for(int i=0; i<24; i++)
-           putint32( i ); //putint32( request_id(i) );
-         putint32(123); // version
+           putint32( request_id(i) ); //putint32( request_id(i) );
+         putint32(VERSION_NR); // version
          endframe();
        }
        break;
@@ -771,6 +762,9 @@ unsigned short int process_opcode(unsigned short int opcode, unsigned short int 
          }
          write_config();
        }
+       startframe(ID_REPORT, 4);
+       putint32(serial_nr);
+       endframe();
        break;
      case RESET: // Reset the tagged state
        tagged = 0;
@@ -954,12 +948,13 @@ void play_test()
 *** led test
 *** Activate all leds one by one
 **/
-void led_test()
+void led_test(int n)
 {
   unsigned long mask;
   unsigned char j;
-  while( button )
+  while( button && n )
   {
+    if ( n > 0 ) n--;
     j++;
     if ( j > 7 ) j = 0;
     for(int i=0; i<24; i++)
@@ -973,6 +968,33 @@ void led_test()
     }
   }
 }
+
+
+/**
+*** arm test
+*** Move arms from left to right
+**/
+void arm_test(int n)
+{
+  unsigned long mask;
+  unsigned char j;
+  while( button && n )
+  {
+    j++;
+    if ( n > 0 ) n--;
+    if ( j > 7 ) j = 0;
+    for(int i=0; i<24; i++)
+    {
+      led_b = i & 32;
+      mask = 1 << i;
+      send_masked('L', mask);
+      send_masked(1<<j, mask );
+     send_masked('A', mask);
+      send_masked(32*j, mask );
+    }
+  }
+}
+
 
 
 /**
@@ -1062,6 +1084,12 @@ int select_function(int n)
 int main(void) {
   read_config();
   rs485_init();
+  ringbuffer_init();
+  led_test(10);
+  arm_test(8);
+  
+  
+  //ringbuffer_test();
   
 #ifdef DEBUG_I2C
   i2c_init();
@@ -1069,15 +1097,18 @@ int main(void) {
   
   while( 1 ) 
   {
-    switch ( select_function(4) )
+    switch ( select_function(5) )
     {
       case 0: // no selection
       case 1: hub_comm(); break; // protocol decoder
-      case 2: led_test(); break;
-      case 3: request_test(); break;
+      case 2: led_test(-1); break;
+      case 3: arm_test(-1); break;
+      case 4: request_test(); break;
+
 #ifdef DEBUG_I2C
-      case 4: i2c_test(); break;
+      case 5: i2c_test(); break;
 #endif
+
       default: break;
 
       /* 
