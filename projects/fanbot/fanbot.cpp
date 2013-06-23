@@ -26,6 +26,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "pinmap.h"
 #include "IAP.h"
 
+
+#define SERVO_TIMEOUT 4000 // msec to switch servo off of no position change has occured [msec]
+#define TICK_INTERVAL 50 // tick interval [msec]
+#define SERVO_PERIOD 15 // period [mec]
+#define SERVO_OFFSET 1300
+#define SERVO_GAIN 2
+
 // externals 
 extern int stdio_uart_inited;
 extern serial_t stdio_uart;
@@ -45,8 +52,8 @@ HID_REPORT send_report, recv_report; //This report will contain data to be sent 
 PwmOut servo1(P0_19);
 PwmOut servo2(P0_18);
 Ticker tic; // msec ticker
-unsigned char pos1=0, pos2=0;
-unsigned char loop_count=0, prog_step=0;
+int pos1=0, pos2=0;
+unsigned char loop_count=0, prog_step=0, servo_timeout = 2000;
 
 // fanbot IO
 BusOut leds(P1_19, P1_25, P0_8, P0_9, P0_22, P0_13, P0_14); // Leds
@@ -150,6 +157,15 @@ void tic_handler()
       }    
     }
   }    
+  
+  if ( servo_timeout <= 0 )
+  {
+    set_servo('A', 0 );
+    set_servo('B', 0 );
+  }
+  else
+    servo_timeout -= TICK_INTERVAL;
+  
 }
 
 // Software UART send. mark is LOW space is HIGH
@@ -206,9 +222,17 @@ void stop()
 void inline set_servo(char n, int val)
 {
   PwmOut *p = (n == 'A' ? &servo1 : &servo2 );
-  int a = (val ? 1300 : 0);  
-  p->pulsewidth_us(a + val);
+  int *pval = (n == 'A' ? &pos1 : &pos2 );
+  int a = (val ? SERVO_OFFSET : 0);  
+  if ( *pval != val )
+  {  // there is a change!
+    servo_timeout = SERVO_TIMEOUT;
+    p->pulsewidth_us(a + SERVO_GAIN*val);
+  }
+  if ( val ) // only remember non zero values
+  *pval = val;
 }
+
 
 // get value, wait max 30msec
 int get_val()
@@ -350,8 +374,8 @@ int main(void) {
 
 
   // Set the servo update period
-  servo1.period_ms(15);
-  servo2.period_ms(15);
+  servo1.period_ms(SERVO_PERIOD);
+  servo2.period_ms(SERVO_PERIOD);
 	set_servo('A', 0);
   set_servo('B', 0);
 	
@@ -370,7 +394,7 @@ int main(void) {
 	  leds = 1<<i;
 	  wait(0.1);
 	}	 
-  tic.attach(tic_handler, 0.05);
+  tic.attach(tic_handler, TICK_INTERVAL/1000.0 );
 	
   if ( !hid.configured() )
     do_serial();
