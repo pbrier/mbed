@@ -215,15 +215,29 @@ void debughex(int i)
 **/
 void inline read_config()
 {
+  int n=24, c, d, swap;
+ 
+
+ 
   serial_nr = iap.read_serial();
   debugstring("Serial:");
   debugint(serial_nr);
   srand(serial_nr);
   iap.read_eeprom( (char*)CONFIG_ADDRESS, (char *)config, sizeof(config) );
- /* for(int i=0; i<24; i++) // init default configuration: bit 0 to 24
+ /* sort in ascending order */
+    for (c = 0 ; c < ( n - 1 ); c++)
   {
-    config[i] = i; // 
-  }*/
+    for (d = 0 ; d < n - c - 1; d++)
+    {
+      if (config[d] > config[d+1]) /* For decreasing order use < */
+      {
+        swap       = config[d];
+        config[d]   = config[d+1];
+        config[d+1] = swap;
+      }
+    }
+  }
+  
 }
 
 
@@ -650,6 +664,7 @@ enum HubOpcodes {
   POS_FRAME,
   REQUEST_STATUS,
   CONFIG_FRAME,
+  RANDOM_FRAME,
   ID_REPORT = 128,
   STATUS_REPORT,
   RESET = 0xDEAD,
@@ -772,7 +787,10 @@ unsigned short int process_opcode(unsigned short int opcode, unsigned short int 
      case PLAY_FRAME: // 1 bit per port
        debugstring("play frame!");
        for(int i=0; i<24; i++)
-        send_masked('p', 1<<i);
+       {
+         if ( port_cmd[i] & 0xFF )
+           send_masked('p', 1<<i);
+       }
        break;
      case LED_FRAME: // 1 bit per port
        debugstring("led frame!");
@@ -804,7 +822,31 @@ unsigned short int process_opcode(unsigned short int opcode, unsigned short int 
    return 1;
  }
  
-
+ 
+ /** Go into random mode */
+void random_mode()
+{
+  signed char dir[24];
+  while ( !c_available() ) 
+  {
+    for(int i=0; i<24; i++)
+    {
+      if ( !(rand() & 0xFFF) ) 
+        dir[i] = ((rand() & 1) ? 1 : -1);
+      send_masked('L', 1<<i);
+      send_masked(rand() & 0xFF, 1<<i);
+      if ( dir[i] )
+        port_cmd[i]++;
+      else
+       port_cmd[i]--;
+      if ( port_cmd[i] > 255 ) port_cmd[i] = 255;
+      if ( port_cmd[i] < 0 ) port_cmd[i] = 0;
+      send_masked('A', 1<<i);
+      send_masked(port_cmd[i], 1<<i);   
+      wait(0.01);
+    }
+  }
+}
  
 /**
 *** HUB Communication
@@ -828,6 +870,11 @@ void hub_comm()
       if ( error ) 
         error--;
       i++;
+     /* if ( i > 0x100000 ) 
+      {
+        random_mode();
+        i = 0;
+      } */
     }
     // debugstring("State: "); debugint(state); debugstring("\n");
     
