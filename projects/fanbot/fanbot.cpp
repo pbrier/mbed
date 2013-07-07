@@ -53,7 +53,7 @@ PwmOut servo1(P0_19);
 PwmOut servo2(P0_18);
 Ticker tic; // msec ticker
 int pos1=0, pos2=0;
-unsigned char loop_count=0, prog_step=0, servo_timeout = 2000;
+unsigned char loop_count=0, prog_step=0, servo_timeout = 200;
 
 // fanbot IO
 BusOut leds(P1_19, P1_25, P0_8, P0_9, P0_22, P0_13, P0_14); // Leds
@@ -72,6 +72,7 @@ PwmOut ir_pwm(P1_13);
 #define MEM_SIZE            256
 #define PROGRAM_ADDRESS       0
 #define NAME_ADDRESS   MEM_SIZE
+#define MODE_ADDRESS (2*MEM_SIZE)
 #define NAME_SIZE            32
 IAP iap;
 
@@ -144,7 +145,7 @@ void tic_handler()
   // The program sequencer:
   if ( counter % 10 == 0 ) // every 500 msec
   {  
-    if ( prog_step < 0 || prog_step > FAN_STEPS ) prog_step = 0;
+    if ( prog_step > FAN_STEPS ) prog_step = 0;
     if ( loop_count > 0 )
     {
       leds = program[prog_step] & 0xFF;
@@ -218,8 +219,9 @@ void stop()
   prog_step = 0;
 }
 
+
 // Set servo position (clamped to range for Fanbot)
-void inline set_servo(char n, int val)
+void inline set_servo_ab(char n, volatile int val)
 {
   PwmOut *p = (n == 'A' ? &servo1 : &servo2 );
   int *pval = (n == 'A' ? &pos1 : &pos2 );
@@ -231,6 +233,16 @@ void inline set_servo(char n, int val)
   }
   if ( val ) // only remember non zero values
   *pval = val;
+}
+
+// Same 'A' value for both servo's
+void inline set_servo(char n, volatile int val)
+{
+  if ( n == 'A' )
+  {
+    set_servo_ab('A', val);
+    set_servo_ab('B', val);
+  }
 }
 
 
@@ -333,11 +345,66 @@ void read_name()
   memcpy(&send_report.data[12], name_string, sizeof(name_string) );
 }
 
+// Read default mode from EEPROM, and store it in to the global var
+int read_mode()
+{
+  int m=0;
+  iap.read_eeprom( (char*)MODE_ADDRESS, (char *)program, MEM_SIZE );
+  memcpy(&m, program, sizeof(m) );
+  if ( m > 10 ) m = 0;
+  return m;
+}
+
+void write_mode(int mode)
+{
+  iap.write_eeprom( (char*)&mode, (char*)MODE_ADDRESS, sizeof(mode) );
+}
+
 void  check_program()
 {
 
 
 }
+
+
+/**
+*** Select a mode
+**/
+int select_mode()
+{
+  int mode = 0, time = 0, state=0;
+  if ( button != 0 ) 
+    return 0; // button not pressed: return
+  while ( 1 )
+  {
+    time++;
+    wait(0.1);
+    if (button == 0 && state != button) // down press
+    {
+      time = 0;
+      mode++;
+      if ( mode > 6)
+        mode = 0;
+    }
+    leds = (time & 1 ? 1<< mode : 0); // flash led
+    if ( time > 20 ) 
+    {
+      return mode+1; // after two seconds: return mode number
+    }
+    state = button;
+  }
+}
+
+static const unsigned char sine_table[] = {
+128	, 141	, 153	, 166	, 178	, 189	, 200	, 210	, 
+220	, 228	, 236	, 242	, 247	, 251	, 254	, 255	, 
+255	, 255	, 253	, 249	, 245	, 239	, 232	, 224	, 
+215	, 205	, 195	, 184	, 172	, 160	, 147	, 134	,
+122	, 109	,  96	,  84	,  72	,  61	,  51	,  41	,
+32	,  24	,  17	,  11	,   7	,   3	,   1	,   1	, 
+  1	,   2	,   5	,   9	,  14	,  20	,  28	,  36	,
+ 46	,  56	,  67	,  78	,  90	, 103	, 115	, 128	,
+};
 
 
 /**
@@ -349,9 +416,11 @@ void  check_program()
 ***      Any serial character received causes serial mode to be activated
 *** In addition the chip has a USB/MSD bootloader that can be activated by holding the program swith when the chip
 *** comes out of reset. 
+*** Additional program modes can be selected during power up:
+*** If the button is pressed during startup: select one of 7 modes. This mode is used and stored for a next time (as stand-alone mode). 
 **/
 int main(void) {
- 
+  int function = 0;
   // Read serial# from device eeprom
   serial_nr = iap.read_serial();
   
@@ -362,7 +431,8 @@ int main(void) {
   
   // Read name from EEPROM and store it in name string and send report
   read_name();
-  iap.read_eeprom( (char*)PROGRAM_ADDRESS, (char *)program, MEM_SIZE );
+  read_mode();
+  iap.read_eeprom( (char*)PROGRAM_ADDRESS, (char *)program, MEM_SIZE ); // perform this as last EEPROM read, as the other read functions will overwrite the program memory
   check_program(); // see if there is a default program loaded
    
   // enable IR transmitter
@@ -380,22 +450,95 @@ int main(void) {
   set_servo('B', 0);
 	
   // Say 'hello'
-	for(int l=0, p=1; l<7;l++, p|= (1<<l))
+	for(int l=0; l<3; l++)
 	{
-	  leds = p;
-	  wait(0.01);
-	}
+  	leds = 255;
+	  wait(0.15);
+    leds = 0;
+    wait(0.15);
+  }
 
   // Connect to USB
 	hid.connect(false); // do not block
-	for(int i=0; i<7 && !hid.configured(); i++)
+  function = 0;
+	for(int i=0; i<7 && !hid.configured() && !function; i++)
 	{
 	  wait(0.1);
 	  leds = 1<<i;
 	  wait(0.1);
+    function = select_mode();
 	}	 
   tic.attach(tic_handler, TICK_INTERVAL/1000.0 );
+
+  if ( function ) // something pressed?
+    write_mode(function);
+  
+  
+  if ( !hid.configured() && !function ) // go to default mode
+    function = read_mode();
 	
+  if ( function ) // button was pressed during startup:
+  {
+    int i;
+    wait(0.5);
+    switch( function )
+    {
+      case 1: // Continous play
+        while( 1 ) 
+        {
+          play(1);
+          wait(1);
+        }
+        break;
+      case 2: // led disco
+      case 3: // led disco and motion
+        i = 0;
+        while( 1 ) 
+        {
+	        wait(0.2);
+	        leds = 1<<i++;
+          if ( function == 3 )
+            set_servo('A', (i * 255)/6 );
+          if ( i == 7 ) 
+            i = 0;
+        }
+        break;
+      case 4:// smooth motion forward and leds
+      case 5: // smooth motion forward and leds (only move if button is pressed)
+        i = 0;
+        set_servo('A', 1);
+        while( 1 ) 
+        {
+	        wait(0.02);
+          set_servo('A', i );
+          i++;
+          if ( i == 255 ) i = 1;
+          leds = i;
+          if ( function == 5 ) while( button ); // wait
+        }
+        break;
+      case 6: // random motion and leds after random time
+        while ( 1 )
+        {
+          wait( (rand() & 1023) / 102 ); // 0 to 10 seconds wait;
+          set_servo('A', rand() & 0xFF ); // random pos
+          leds = rand() & 0xFF;
+        }
+        break;
+       case 7: // Smooth motion back and forth
+         i = 0;
+         while(1)
+         {
+           wait(0.03);
+           leds = 3 | (1 << (sine_table[i]>>5));       
+           set_servo('A', sine_table[i] );
+           if ( ++i > 63 ) i = 0;
+         }
+         break;
+    }
+  }
+  leds = 255;
+  
   if ( !hid.configured() )
     do_serial();
   
@@ -441,3 +584,4 @@ int main(void) {
 	  wait_ms(1);
 	}
 } // main
+
