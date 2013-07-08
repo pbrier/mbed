@@ -1,0 +1,22 @@
+#include "mbed.h"
+#include "USBKeyboard.h"
+ 
+//LED1: NUM_LOCK
+//LED2: CAPS_LOCK
+//LED3: SCROLL_LOCK
+BusOut leds(P1_19, P1_25, P0_8, P0_9, P0_22, P0_13, P0_14); // Leds
+ 
+//USBKeyboard
+USBKeyboard keyboard;
+ 
+int main(void) {
+    while (1) {
+      //  keyboard.mediaControl(KEY_VOLUME_DOWN);
+   //     keyboard.printf("Hello World from Mbed\r\n");
+      //  keyboard.keyCode('s', KEY_CTRL);
+        keyboard._putc('a');
+        //keyboard.keyCode(KEY_CAPS_LOCK);
+         wait(0.001);
+        leds = keyboard.lockStatus();
+    }
+}
